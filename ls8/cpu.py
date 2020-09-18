@@ -9,6 +9,10 @@ POP  = 0b01000110
 SP   = 0b00000111
 CALL = 0b01010000
 RET  = 0b00010001
+CMP  = 0b10100111
+JMP  = 0b01010100
+JEQ  = 0b01010101
+JNE  = 0b01010110
 
 import sys
 
@@ -21,21 +25,26 @@ class CPU:
         self.reg = [0] * 8 # R0 - R7
         self.ram = [0] * 256 #  256 bites memory
         self.pc = 0
-
+        self.fl = 0b00000000 # 00000LGE (less than, greater than, equal)
         self.running = False
 
-        self.branchtable = {}
-        self.branchtable[HLT] = self.hlt_instruction
-        self.branchtable[LDI] = self.ldi_instruction
-        self.branchtable[PRN] = self.prn_instruction
-        self.branchtable[ADD] = self.add_instruction
-        self.branchtable[MUL] = self.mul_instruction
-        self.branchtable[PUSH] = self.push_instruction
-        self.branchtable[POP] = self.pop_instruction
-        self.branchtable[CALL] = self.call_instruction
-        self.branchtable[RET] = self.ret_instruction
+        self.branchtable = {
+            HLT: self.hlt_instruction,
+            LDI: self.ldi_instruction,
+            PRN: self.prn_instruction,
+            ADD: self.add_instruction,
+            MUL: self.mul_instruction,
+            PUSH: self.push_instruction,
+            POP: self.pop_instruction,
+            CALL: self.call_instruction,
+            RET: self.ret_instruction,
+            CMP: self.cmp_instruction,
+            JMP: self.jmp_instruction,
+            JEQ: self.jeq_instruction,
+            JNE: self.jne_instruction
+        }
 
-        # STEP 10
+        # STEP 10 -- stack pointer
         self.reg[SP] = 0xF4
 
     # Step 2: RAM methods (ram_read & ram_write)
@@ -45,27 +54,6 @@ class CPU:
     def ram_write(self, value, address):
         self.ram[address] = value
 
-    # def load(self):
-    #     """Load a program into memory."""
-
-    #     address = 0
-
-    #     # For now, we've just hardcoded a program:
-
-    #     program = [
-    #         # From print8.ls8
-    #         0b10000010, # LDI R0,8
-    #         0b00000000,
-    #         0b00001000,
-    #         0b01000111, # PRN R0
-    #         0b00000000,
-    #         0b00000001, # HLT
-    #     ]
-
-    #     for instruction in program:
-    #         self.ram[address] = instruction
-    #         address += 1
-
     def load(self):
         if len(sys.argv) != 2:
             print("usage: comp.py filename")
@@ -73,10 +61,12 @@ class CPU:
         
         try:
             address = 0
+            # open the file (2nd arg)
             with open(sys.argv[1]) as f:
                 for line in f:
                     t = line.split('#')
                     instruction = t[0].strip()
+                    # ignore the blank lines
                     if instruction == "":
                         continue
                     
@@ -102,6 +92,12 @@ class CPU:
         # Step 8: MUL -- multiply
         elif op == 'MUL':
             self.reg[reg_a] *= self.reg[reg_b]
+        # Sprint: CMP -- compare
+        elif op == 'CMP':
+            if self.reg[reg_a] == self.reg[reg_b]:
+                self.fl = 0b00000001
+            else:
+                self.fl = 0b00000000
         else:
             raise Exception("Unsupported ALU operation")
 
@@ -113,8 +109,6 @@ class CPU:
 
         print(f"TRACE: %02X | %02X %02X %02X |" % (
             self.pc,
-            #self.fl,
-            #self.ie,
             self.ram_read(self.pc),
             self.ram_read(self.pc + 1),
             self.ram_read(self.pc + 2)
@@ -143,38 +137,12 @@ class CPU:
 
         self.pc += 3
 
-    # Step 3: run() method
-    # def run(self):
-    #     """Run the CPU."""
-    #     self.running = True
-
-    #     while self.running:
-    #         ir = self.ram[self.pc] # Instruction Register, copy of the currently-executing instruction
-
-    #         if ir == 0b00000001: # HLT - Halt
-    #             self.hlt_instruction()
-
-    #         elif ir == 0b10000010: # SAVE_REG - Adding
-    #             operand_a = self.ram[self.pc+1]
-    #             operand_b = self.ram[self.pc+2]
-    #             self.reg[operand_a] = operand_b
-    #             # print(self.reg)
-    #             self.pc += 3
-
-    #         elif ir == 0b01000111: # PRINT_REG
-    #             operand_a = self.ram[self.pc+1]
-    #             print(self.reg[operand_a])
-    #             self.pc += 2
-
-    #         else:
-    #             print(f"Unknown instruction {ir}")
-
     def run(self):
         """Run the CPU."""
         self.running = True
 
         while self.running:
-            ir = self.ram[self.pc] # Instruction Register, copy of the currently-executing intruction
+            ir = self.ram[self.pc] # Instruction Register, copy of the currently-executing instruction
 
             if ir in self.branchtable:
                 self.branchtable[ir]()
@@ -290,3 +258,26 @@ class CPU:
 
         # and set it to pc
         self.pc = value
+    
+    # Sprint Tasks
+    def cmp_instruction(self):
+        reg_a = self.ram_read(self.pc + 1)
+        reg_b = self.ram_read(self.pc + 2)
+        self.alu("CMP", reg_a, reg_b)
+        self.pc += 3
+
+    def jmp_instruction(self):
+        reg_address = self.ram_read(self.pc + 1)
+        self.pc = self.reg[reg_address]
+
+    def jeq_instruction(self):
+        if self.fl == 1:
+            self.jmp_instruction()
+        else:
+            self.pc += 2
+
+    def jne_instruction(self):
+        if self.fl != 1:
+            self.jmp_instruction()
+        else:
+            self.pc += 2
