@@ -7,6 +7,8 @@ MUL  = 0b10100010
 PUSH = 0b01000101
 POP  = 0b01000110
 SP   = 0b00000111
+CALL = 0b01010000
+RET  = 0b00010001
 
 import sys
 
@@ -30,6 +32,8 @@ class CPU:
         self.branchtable[MUL] = self.mul_instruction
         self.branchtable[PUSH] = self.push_instruction
         self.branchtable[POP] = self.pop_instruction
+        self.branchtable[CALL] = self.call_instruction
+        self.branchtable[RET] = self.ret_instruction
 
         # STEP 10
         self.reg[SP] = 0xF4
@@ -163,7 +167,7 @@ class CPU:
     #             self.pc += 2
 
     #         else:
-    #             print(f"Unknown instrution {ir}")
+    #             print(f"Unknown instruction {ir}")
 
     def run(self):
         """Run the CPU."""
@@ -175,7 +179,8 @@ class CPU:
             if ir in self.branchtable:
                 self.branchtable[ir]()
             else:
-                print(f"Unknown instrution {ir}")
+                print(f"Unknown instruction {ir}")
+                sys.exit(3)
 
     # Step 4: HLT instruction handler
     def hlt_instruction(self):
@@ -230,8 +235,6 @@ class CPU:
         top_of_stack_addr = self.reg[SP]
         self.ram[top_of_stack_addr] = operand_b
 
-        # print(memory[0xea:0xf4])
-
         self.pc += 2
 
     def pop_instruction(self):
@@ -251,3 +254,39 @@ class CPU:
         self.reg[SP] += 1
 
         self.pc += 2
+
+    # STEP 11: CALL and RET
+
+    def call_instruction(self):
+        # Compute return addr
+        return_addr = self.pc + 2
+
+        # Push return addr on stack:
+        # Decrement SP
+        self.reg[SP] -= 1
+
+        # Copy the value to the SP address
+        top_of_stack_addr = self.reg[SP]
+        self.ram[top_of_stack_addr] = return_addr
+
+        # Get the value from the operand reg
+        operand_a = self.ram[self.pc + 1]
+        operand_b = self.reg[operand_a]
+
+        # Set the self.pc to that value 
+        self.pc = operand_b
+
+
+    def ret_instruction(self):
+        # Compute return addr 
+        # Get the top of stack addr
+        top_of_stack_addr = self.reg[SP]
+
+        # Get the value at the top of the stack
+        value = self.ram[top_of_stack_addr]
+
+        # Increment the SP
+        self.reg[SP] += 1
+
+        # and set it to pc
+        self.pc = value
